@@ -1,0 +1,6 @@
+{
+  "name": "Vehicle Plate Editor",
+  "description": "Professional AI Vehicle License Plate Editor with strict localized pixel preservation for vehicle photographs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

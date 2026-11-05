@@ -1,0 +1,6 @@
+{
+  "summary": "Rencana implementasi perbaikan detail visual plat nomor kendaraan:\n- Penyempurnaan geometri & ketebalan karakter agar persis cetakan timbul plat referensi asli (B 9781 UXI)\n- Penataan jarak renggang proporsional antar kelompok karakter (kode wilayah, angka polisi, seri akhir)\n- Penyelarasan sudut kemiringan perspektif dan tekstur cat enamel timbul\n- Penambahan penanda visual SIMULASI/MOCKUP dan direct download 4 file sekaligus",
+  "updatedAt": "2026-11-05T14:37:46.980126138Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
