@@ -382,7 +382,7 @@ export default function App() {
                       setSliderPos(50);
                     }
                   }}
-                  className="relative h-[320px] sm:h-[380px] bg-[#070b14] flex items-center justify-center p-2 cursor-pointer overflow-hidden group/img"
+                  className="relative h-[380px] sm:h-[460px] bg-[#070b14] flex items-center justify-center p-2 cursor-pointer overflow-hidden group/img"
                 >
                   {itemResult ? (
                     <img

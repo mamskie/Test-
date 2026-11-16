@@ -92,71 +92,12 @@ export function parseIndoPlateGroups(input: string): string[] {
 }
 
 /**
- * Cleanly erases the old plate contents (both old plate number and expiration date)
- * within the plate's inner rectangle, without touching the black dudukan frame,
- * the outer bevel, or the vehicle body.
- *
- * Fills the plate surface with the authentic metallic gradient of the plate and
- * subtle camera sensor grain so the plate looks 100% natural, clean, and ready for new text.
+ * Renders the complete replacement license plate (clean metallic background matching local
+ * ambient light, top overhang recess shadow, stamped charcoal characters, subtle border,
+ * and uniform sensor grain across both plate and ink) onto an offscreen supersampled canvas
+ * and composites it onto the master photo using the exact perspective transform.
  */
-function eraseOldPlateContent(
-  ctx: CanvasRenderingContext2D,
-  inner: PlateInnerZone,
-  origW: number,
-  origH: number
-) {
-  const cx = (inner.cx / 100) * origW;
-  const cy = (inner.cy / 100) * origH;
-  const w = Math.round((inner.width / 100) * origW);
-  const h = Math.round((inner.height / 100) * origH);
-
-  if (w <= 0 || h <= 0) return;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-
-  if (inner.angle) {
-    ctx.rotate((inner.angle * Math.PI) / 180);
-  }
-  if (inner.skewY) {
-    ctx.transform(1, inner.skewY, 0, 1, 0, 0);
-  }
-
-  // Draw authentic metal plate gradient from top to bottom
-  const grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
-  grad.addColorStop(0, inner.topColor);
-  grad.addColorStop(1, inner.botColor);
-
-  ctx.fillStyle = grad;
-  ctx.fillRect(-w / 2, -h / 2, w, h);
-
-  ctx.restore();
-
-  // Apply subtle camera sensor ISO noise across the erased rectangle
-  // to perfectly match the photo's natural grain structure
-  const rx = Math.max(0, Math.round(cx - w / 2));
-  const ry = Math.max(0, Math.round(cy - h / 2));
-  const rw = Math.min(origW - rx, w);
-  const rh = Math.min(origH - ry, h);
-
-  if (rw > 0 && rh > 0) {
-    const imgData = ctx.getImageData(rx, ry, rw, rh);
-    const data = imgData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const grain = (Math.random() - 0.5) * 4;
-      data[i] = Math.min(255, Math.max(0, data[i] + grain));
-      data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + grain));
-      data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + grain));
-    }
-    ctx.putImageData(imgData, rx, ry);
-  }
-}
-
-/**
- * Stamps the new license plate text onto the cleanly erased plate surface
- * using authentic Indonesian TNKB die-pressed font geometry.
- */
-function stampNewPlateContent(
+function renderNaturalPlate(
   ctx: CanvasRenderingContext2D,
   inner: PlateInnerZone,
   origW: number,
@@ -166,21 +107,67 @@ function stampNewPlateContent(
 ) {
   const cx = (inner.cx / 100) * origW;
   const cy = (inner.cy / 100) * origH;
-  const targetW = (inner.width / 100) * origW;
+  const w = Math.round((inner.width / 100) * origW);
+  const h = Math.round((inner.height / 100) * origH);
 
-  const charHeight = inner.charHeightPx;
+  if (w <= 0 || h <= 0) return;
+
+  // 2x supersampling offscreen canvas for crisp yet naturally anti-aliased edges
+  const ss = 2;
+  const pw = w * ss;
+  const ph = h * ss;
+
+  const plateCanvas = document.createElement('canvas');
+  plateCanvas.width = pw;
+  plateCanvas.height = ph;
+  const pCtx = plateCanvas.getContext('2d');
+  if (!pCtx) return;
+
+  // Clip to subtle rounded corners matching real stamped Indonesian plates
+  const cornerR = Math.max(2, Math.round(ph * 0.08));
+  pCtx.beginPath();
+  pCtx.roundRect(0, 0, pw, ph, cornerR);
+  pCtx.clip();
+
+  // 1. Base metallic surface gradient matched to local photo lighting
+  const grad = pCtx.createLinearGradient(0, 0, 0, ph);
+  grad.addColorStop(0, inner.topColor);
+  grad.addColorStop(1, inner.botColor);
+  pCtx.fillStyle = grad;
+  pCtx.fillRect(0, 0, pw, ph);
+
+  // 2. Subtle recessed ambient top overhang shadow & gentle side vignette
+  const topShadow = pCtx.createLinearGradient(0, 0, 0, ph * 0.28);
+  topShadow.addColorStop(0, 'rgba(10, 12, 16, 0.25)');
+  topShadow.addColorStop(1, 'rgba(10, 12, 16, 0)');
+  pCtx.fillStyle = topShadow;
+  pCtx.fillRect(0, 0, pw, ph * 0.28);
+
+  const botShadow = pCtx.createLinearGradient(0, ph * 0.82, 0, ph);
+  botShadow.addColorStop(0, 'rgba(10, 12, 16, 0)');
+  botShadow.addColorStop(1, 'rgba(10, 12, 16, 0.16)');
+  pCtx.fillStyle = botShadow;
+  pCtx.fillRect(0, ph * 0.82, pw, ph * 0.18);
+
+  // Subtle horizontal metallic sheen
+  const sheen = pCtx.createLinearGradient(0, 0, pw, 0);
+  sheen.addColorStop(0, 'rgba(0, 0, 0, 0.06)');
+  sheen.addColorStop(0.35, 'rgba(255, 255, 255, 0.04)');
+  sheen.addColorStop(0.65, 'rgba(255, 255, 255, 0.02)');
+  sheen.addColorStop(1, 'rgba(0, 0, 0, 0.07)');
+  pCtx.fillStyle = sheen;
+  pCtx.fillRect(0, 0, pw, ph);
+
+  // 3. Stamp Indonesian TNKB characters in natural camera-matched charcoal ink
+  const charHeight = inner.charHeightPx * ss;
   const groups = parseIndoPlateGroups(plateText);
-
-  // Setup authentic plate font
   const fontFam = '"CharlesWrightPlate", "MandatoryPlate", "PlatNomor", sans-serif';
-  ctx.font = `bold ${charHeight}px ${fontFam}`;
-  ctx.textBaseline = 'middle';
 
-  // Spacing metrics matching Indonesian plate standards:
-  // - inter-group gap: ~55% of charHeight (wide spacing between e.g. M, 4, M)
-  // - intra-group gap: ~12% of charHeight (tight spacing between digits)
-  const intraGroupGap = Math.max(1, Math.round(charHeight * 0.12));
-  const interGroupGap = Math.max(4, Math.round(charHeight * 0.55));
+  pCtx.font = `bold ${charHeight}px ${fontFam}`;
+  pCtx.textBaseline = 'middle';
+
+  const intraGroupGap = Math.max(2, Math.round(charHeight * 0.12));
+  const interGroupGap = Math.max(8, Math.round(charHeight * 0.55));
 
   interface CharLayout {
     char: string;
@@ -200,9 +187,9 @@ function stampNewPlateContent(
     const chars: CharLayout[] = [];
     for (let i = 0; i < grp.length; i++) {
       const ch = grp[i];
-      const w = ctx.measureText(ch).width;
-      chars.push({ char: ch, width: w });
-      grpW += w;
+      const cw = pCtx.measureText(ch).width;
+      chars.push({ char: ch, width: cw });
+      grpW += cw;
       if (i < grp.length - 1) grpW += intraGroupGap;
     }
     groupLayouts.push({ chars, width: grpW });
@@ -210,10 +197,70 @@ function stampNewPlateContent(
     if (gIdx < groups.length - 1) totalContentWidth += interGroupGap;
   });
 
-  // Calculate condense scale if text exceeds available plate width
-  const maxAllowedWidth = targetW * 0.94;
+  const maxAllowedWidth = pw * 0.90;
   const scaleX = totalContentWidth > maxAllowedWidth ? maxAllowedWidth / totalContentWidth : 1.0;
 
+  pCtx.save();
+  pCtx.translate(pw / 2, ph / 2);
+
+  // Main characters
+  pCtx.save();
+  pCtx.scale(scaleX, 1.0);
+  pCtx.fillStyle = inner.textColor;
+  pCtx.globalAlpha = 0.91;
+  pCtx.shadowColor = 'rgba(0, 0, 0, 0.16)';
+  pCtx.shadowBlur = 1.2;
+  pCtx.shadowOffsetY = 0.6;
+  pCtx.textAlign = 'left';
+  pCtx.textBaseline = 'middle';
+
+  let curX = -totalContentWidth / 2;
+  const mainY = inner.mainOffsetYPx * ss;
+
+  groupLayouts.forEach((grp, gIdx) => {
+    grp.chars.forEach((cItem, cIdx) => {
+      pCtx.fillText(cItem.char, curX, mainY);
+      curX += cItem.width;
+      if (cIdx < grp.chars.length - 1) curX += intraGroupGap;
+    });
+    if (gIdx < groupLayouts.length - 1) curX += interGroupGap;
+  });
+  pCtx.restore();
+
+  // Expiration date ("04·28")
+  if (plateExp && plateExp.trim()) {
+    pCtx.save();
+    pCtx.font = `bold ${inner.expHeightPx * ss}px ${fontFam}`;
+    pCtx.textAlign = 'center';
+    pCtx.textBaseline = 'middle';
+    pCtx.fillStyle = inner.textColor;
+    pCtx.globalAlpha = 0.82;
+    pCtx.fillText(plateExp.trim(), 0, inner.expOffsetYPx * ss);
+    pCtx.restore();
+  }
+
+  pCtx.restore();
+
+  // 4. Subtle recessed plate edge hairline (soft, never harsh digital outline)
+  pCtx.strokeStyle = 'rgba(22, 25, 30, 0.42)';
+  pCtx.lineWidth = ss;
+  pCtx.beginPath();
+  pCtx.roundRect(0.5, 0.5, pw - 1, ph - 1, cornerR);
+  pCtx.stroke();
+
+  // 5. Apply uniform ISO camera grain across BOTH plate metal and stamped characters
+  const imgData = pCtx.getImageData(0, 0, pw, ph);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+    const grain = (Math.random() - 0.5) * 6;
+    data[i] = Math.min(255, Math.max(0, data[i] + grain));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + grain));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + grain));
+  }
+  pCtx.putImageData(imgData, 0, 0);
+
+  // 6. Composite onto master image with perspective transform & slight optical softness
   ctx.save();
   ctx.translate(cx, cy);
 
@@ -224,79 +271,20 @@ function stampNewPlateContent(
     ctx.transform(1, inner.skewY, 0, 1, 0, 0);
   }
 
-  ctx.scale(scaleX, 1.0);
-
-  // 1. Draw Main Plate Characters
-  // Solid stamped enamel paint matching original photo color
-  ctx.fillStyle = inner.textColor;
-
-  let curX = -totalContentWidth / 2;
-  const mainY = inner.mainOffsetYPx;
-
-  groupLayouts.forEach((grp, gIdx) => {
-    grp.chars.forEach((cItem, cIdx) => {
-      ctx.fillText(cItem.char, curX, mainY);
-      curX += cItem.width;
-      if (cIdx < grp.chars.length - 1) curX += intraGroupGap;
-    });
-    if (gIdx < groupLayouts.length - 1) curX += interGroupGap;
-  });
-
-  // 2. Draw Expiration Date (e.g. "04·28") centered under plate number
-  if (plateExp && plateExp.trim()) {
-    ctx.font = `bold ${inner.expHeightPx}px ${fontFam}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(plateExp.trim(), 0, inner.expOffsetYPx);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  if ('filter' in ctx) {
+    ctx.filter = 'blur(0.32px)';
   }
-
-  ctx.restore();
-}
-
-/**
- * Draws a professional, discreet simulation badge: [ SIMULASI VISUAL / MOCKUP ]
- * to clearly denote that the image is a visual simulation.
- */
-function drawSimulationWatermark(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number
-) {
-  const badgeText = 'SIMULASI VISUAL / MOCKUP';
-  const fontSize = Math.max(10, Math.round(height * 0.013));
-  ctx.save();
-  ctx.font = `700 ${fontSize}px "Segoe UI", Roboto, -apple-system, sans-serif`;
-
-  const textMetrics = ctx.measureText(badgeText);
-  const padX = fontSize * 0.8;
-  const padY = fontSize * 0.45;
-  const badgeW = textMetrics.width + padX * 2;
-  const badgeH = fontSize + padY * 2;
-
-  const posX = width - badgeW - Math.round(width * 0.015);
-  const posY = height - badgeH - Math.round(height * 0.015);
-
-  ctx.fillStyle = 'rgba(7, 11, 20, 0.78)';
-  ctx.beginPath();
-  ctx.roundRect(posX, posY, badgeW, badgeH, 4);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.fillStyle = '#38bdf8';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(badgeText, posX + padX, posY + badgeH / 2);
+  ctx.drawImage(plateCanvas, -w / 2, -h / 2, w, h);
   ctx.restore();
 }
 
 /**
  * Composite a single vehicle's license plate:
- * 1. Cleanly erases the old plate content inside the black border.
- * 2. Stamps the new characters using exact Indonesian TNKB font geometry.
- * 3. Keeps 100% of all other pixels (bumper, frame, bolts, wheels, background) untouched!
- * 4. Adds simulation watermark.
+ * 1. Cleanly replaces the old plate content inside the holder.
+ * 2. Stamps the new characters with local ambient lighting, overhang shadow, and grain.
+ * 3. Keeps 100% of all other pixels (bumper, frame, bolts, wheels, background) untouched.
  */
 export async function compositeSingleVehicle(
   vehicle: VehicleAsset,
@@ -321,11 +309,8 @@ export async function compositeSingleVehicle(
   // 3. Draw 100% of the pristine original photograph
   ctx.drawImage(origImg, 0, 0, origW, origH);
 
-  // 4. STEP 1: Hapus isi plat nomor yang lama (cleanly erase old plate content)
-  eraseOldPlateContent(ctx, vehicle.plateInner, origW, origH);
-
-  // 5. STEP 2: Masukkan isi plat nomor baru dari inputan (stamp new plate content)
-  stampNewPlateContent(
+  // 4. Render natural lighting-matched plate + stamped characters
+  renderNaturalPlate(
     ctx,
     vehicle.plateInner,
     origW,
@@ -334,40 +319,7 @@ export async function compositeSingleVehicle(
     plateExp
   );
 
-  // 6. Handle floor reflection if present (e.g. car-3 on shiny green floor)
-  if (vehicle.plateInner.reflectionZone) {
-    const rZone = vehicle.plateInner.reflectionZone;
-    const rcx = (rZone.cx / 100) * origW;
-    const rcy = (rZone.cy / 100) * origH;
-    const rw = Math.round((rZone.width / 100) * origW);
-    const rh = Math.round((rZone.height / 100) * origH);
-
-    ctx.save();
-    ctx.translate(rcx, rcy);
-    ctx.scale(0.85, -0.85); // Vertically inverted for reflection
-
-    // Clean reflection patch
-    const rGrad = ctx.createLinearGradient(0, -rh / 2, 0, rh / 2);
-    rGrad.addColorStop(0, rZone.topColor);
-    rGrad.addColorStop(1, rZone.botColor);
-    ctx.fillStyle = rGrad;
-    ctx.fillRect(-rw / 2, -rh / 2, rw, rh);
-
-    // Subtle blurred reflected text
-    ctx.font = `bold ${rZone.charHeightPx}px "CharlesWrightPlate", "MandatoryPlate", sans-serif`;
-    ctx.fillStyle = rZone.textColor;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.globalAlpha = 0.55;
-    ctx.filter = 'blur(1.2px)';
-    ctx.fillText(plateText.trim().toUpperCase(), 0, 0);
-    ctx.restore();
-  }
-
-  // 7. Add simulation watermark for legal compliance
-  drawSimulationWatermark(ctx, origW, origH);
-
-  // 8. Output high-resolution data URL and Blob
+  // 5. Output high-resolution data URL and Blob (tanpa tag simulasi/mockup)
   const dataUrl = canvas.toDataURL('image/png', 1.0);
   const blob = await new Promise<Blob>((resolve) => {
     canvas.toBlob((b) => resolve(b || new Blob()), 'image/png', 1.0);
