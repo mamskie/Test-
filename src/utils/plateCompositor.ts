@@ -138,23 +138,23 @@ function renderNaturalPlate(
 
   // 2. Subtle recessed ambient top overhang shadow & gentle side vignette
   const topShadow = pCtx.createLinearGradient(0, 0, 0, ph * 0.28);
-  topShadow.addColorStop(0, 'rgba(10, 12, 16, 0.25)');
+  topShadow.addColorStop(0, 'rgba(10, 12, 16, 0.14)');
   topShadow.addColorStop(1, 'rgba(10, 12, 16, 0)');
   pCtx.fillStyle = topShadow;
   pCtx.fillRect(0, 0, pw, ph * 0.28);
 
-  const botShadow = pCtx.createLinearGradient(0, ph * 0.82, 0, ph);
+  const botShadow = pCtx.createLinearGradient(0, ph * 0.84, 0, ph);
   botShadow.addColorStop(0, 'rgba(10, 12, 16, 0)');
-  botShadow.addColorStop(1, 'rgba(10, 12, 16, 0.16)');
+  botShadow.addColorStop(1, 'rgba(10, 12, 16, 0.08)');
   pCtx.fillStyle = botShadow;
-  pCtx.fillRect(0, ph * 0.82, pw, ph * 0.18);
+  pCtx.fillRect(0, ph * 0.84, pw, ph * 0.16);
 
   // Subtle horizontal metallic sheen
   const sheen = pCtx.createLinearGradient(0, 0, pw, 0);
-  sheen.addColorStop(0, 'rgba(0, 0, 0, 0.06)');
-  sheen.addColorStop(0.35, 'rgba(255, 255, 255, 0.04)');
+  sheen.addColorStop(0, 'rgba(0, 0, 0, 0.04)');
+  sheen.addColorStop(0.35, 'rgba(255, 255, 255, 0.03)');
   sheen.addColorStop(0.65, 'rgba(255, 255, 255, 0.02)');
-  sheen.addColorStop(1, 'rgba(0, 0, 0, 0.07)');
+  sheen.addColorStop(1, 'rgba(0, 0, 0, 0.05)');
   pCtx.fillStyle = sheen;
   pCtx.fillRect(0, 0, pw, ph);
 
@@ -167,7 +167,7 @@ function renderNaturalPlate(
   pCtx.textBaseline = 'middle';
 
   const intraGroupGap = Math.max(2, Math.round(charHeight * 0.12));
-  const interGroupGap = Math.max(8, Math.round(charHeight * 0.55));
+  const interGroupGap = Math.max(6, Math.round(charHeight * 0.42));
 
   interface CharLayout {
     char: string;
