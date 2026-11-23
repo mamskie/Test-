@@ -22,8 +22,8 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // 1. Vehicle category: 'car' (Daihatsu Gran Max) or 'truck' (Isuzu Elf Boks)
-  const [category, setCategory] = useState<'car' | 'truck'>('car');
+  // 1. Vehicle category: 'car' (Daihatsu Gran Max), 'truck' (Isuzu Elf Boks), or 'canter' (Fuso Canter FE84GX)
+  const [category, setCategory] = useState<'car' | 'truck' | 'canter'>('car');
 
   // 2. License plate text input: default to "M 4 M" as mentioned in user prompt
   const [plateInput, setPlateInput] = useState('M 4 M');
@@ -46,7 +46,7 @@ export default function App() {
 
   // Generate all 4 images whenever category, plateInput, or plateExp changes
   const runBatchGeneration = async (
-    targetCat: 'car' | 'truck' = category,
+    targetCat: 'car' | 'truck' | 'canter' = category,
     targetPlate: string = plateInput,
     targetExp: string = plateExp
   ) => {
@@ -80,13 +80,13 @@ export default function App() {
     }
   };
 
-  // Initial load: generate 4 Gran Max photos with plate "M 4 M"
+  // Initial load: generate 4 photos for active category with plate "M 4 M"
   useEffect(() => {
     runBatchGeneration(category, plateInput, plateExp);
   }, [category]);
 
   // Handle category switch
-  const handleSelectCategory = (newCat: 'car' | 'truck') => {
+  const handleSelectCategory = (newCat: 'car' | 'truck' | 'canter') => {
     setCategory(newCat);
   };
 
@@ -140,6 +140,12 @@ export default function App() {
   }, [isDraggingSlider]);
 
   const cleanDisplayPlate = plateInput.trim() || 'M 4 M';
+  const activeCategoryLabel =
+    category === 'car'
+      ? 'Daihatsu Gran Max'
+      : category === 'truck'
+      ? 'Truk Isuzu Elf'
+      : 'Truk Fuso Canter';
 
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
@@ -183,41 +189,54 @@ export default function App() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
               {/* 1. Pilih Jenis Kendaraan */}
-              <div className="lg:col-span-5 flex flex-col gap-1.5">
+              <div className="lg:col-span-6 flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                   <span>1. Pilih Jenis Kendaraan</span>
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => handleSelectCategory('car')}
-                    className={`py-3 px-3.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border ${
+                    className={`py-3 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 border ${
                       category === 'car'
                         ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/20'
                         : 'bg-[#11192e] text-slate-300 border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    <Car className="h-4 w-4" />
-                    <span>Daihatsu Gran Max (4 Foto)</span>
+                    <Car className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Daihatsu Gran Max</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleSelectCategory('truck')}
-                    className={`py-3 px-3.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border ${
+                    className={`py-3 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 border ${
                       category === 'truck'
                         ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/20'
                         : 'bg-[#11192e] text-slate-300 border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    <Truck className="h-4 w-4" />
-                    <span>Truk Isuzu Elf (4 Foto)</span>
+                    <Truck className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Truk Isuzu Elf</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCategory('canter')}
+                    className={`py-3 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 border ${
+                      category === 'canter'
+                        ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/20'
+                        : 'bg-[#11192e] text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <Truck className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Truk Fuso Canter</span>
                   </button>
                 </div>
               </div>
 
               {/* 2. Input Plat Nomor */}
-              <div className="lg:col-span-4 flex flex-col gap-1.5">
+              <div className="lg:col-span-3 flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   2. Masukkan Nomor Plat Baru
                 </label>
@@ -229,8 +248,8 @@ export default function App() {
                     placeholder="Contoh: M 4 M"
                     className="w-full bg-[#070b14] border-2 border-slate-700 focus:border-cyan-400 rounded-xl px-4 py-2.5 text-slate-100 font-mono text-lg font-black uppercase tracking-wider placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-500 uppercase">
-                    Font Asli Samsat
+                  <span className="hidden xl:inline absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-500 uppercase">
+                    Font Asli
                   </span>
                 </div>
               </div>
@@ -282,7 +301,7 @@ export default function App() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider font-mono">
-                Hasil 4 Foto Referensi ({category === 'car' ? 'Daihatsu Gran Max' : 'Truk Isuzu Elf'})
+                Hasil 4 Foto Referensi ({activeCategoryLabel})
               </h2>
               <span className="px-2.5 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 text-xs font-mono font-bold">
                 Plat: {cleanDisplayPlate}

@@ -23,6 +23,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 let fontsLoadedPromise: Promise<void> | null = null;
+let platNomorLoaded = false;
 
 /**
  * Ensures the authentic Indonesian vehicle license plate fonts are fully loaded
@@ -35,13 +36,14 @@ export function ensurePlateFontLoaded(): Promise<void> {
     if (typeof window === 'undefined' || !document.fonts) return;
 
     try {
-      const cwFont = new FontFace(
-        'CharlesWrightPlate',
-        'url(/fonts/CharlesWright.otf)',
-        { weight: 'bold', style: 'normal' }
+      const pnFont = new FontFace(
+        'PlatNomor',
+        'url(/fonts/PlatNomor.ttf)',
+        { weight: 'normal', style: 'normal' }
       );
-      const loadedCW = await cwFont.load();
-      document.fonts.add(loadedCW);
+      const loadedPN = await pnFont.load();
+      document.fonts.add(loadedPN);
+      platNomorLoaded = true;
 
       const mandFont = new FontFace(
         'MandatoryPlate',
@@ -51,13 +53,13 @@ export function ensurePlateFontLoaded(): Promise<void> {
       const loadedMand = await mandFont.load();
       document.fonts.add(loadedMand);
 
-      const pnFont = new FontFace(
-        'PlatNomor',
-        'url(/fonts/PlatNomor.ttf)',
-        { weight: 'normal', style: 'normal' }
+      const cwFont = new FontFace(
+        'CharlesWrightPlate',
+        'url(/fonts/CharlesWright.otf)',
+        { weight: 'bold', style: 'normal' }
       );
-      const loadedPN = await pnFont.load();
-      document.fonts.add(loadedPN);
+      const loadedCW = await cwFont.load();
+      document.fonts.add(loadedCW);
 
       await document.fonts.ready;
     } catch (e) {
@@ -92,10 +94,38 @@ export function parseIndoPlateGroups(input: string): string[] {
 }
 
 /**
- * Renders the complete replacement license plate (clean metallic background matching local
- * ambient light, top overhang recess shadow, stamped charcoal characters, subtle border,
- * and uniform sensor grain across both plate and ink) onto an offscreen supersampled canvas
- * and composites it onto the master photo using the exact perspective transform.
+ * Converts digit '0' into uppercase 'O' when PlatNomor.ttf is active so zeroes match
+ * authentic slashless Indonesian Korlantas stamped plates.
+ */
+function formatKorlantasGlyphs(text: string, usePlatNomor: boolean): string {
+  if (!usePlatNomor) return text;
+  return text.replace(/0/g, 'O');
+}
+
+/**
+ * Draws rounded stroke + fill cleanly as a single uniform-opacity glyph shape.
+ */
+function drawStampedGlyph(
+  ctx: CanvasRenderingContext2D,
+  glyph: string,
+  x: number,
+  y: number,
+  strokeWidth: number
+) {
+  if (strokeWidth > 0.25) {
+    ctx.lineWidth = strokeWidth;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeText(glyph, x, y);
+  }
+  ctx.fillText(glyph, x, y);
+}
+
+/**
+ * Renders the complete replacement license plate (clean metallic aluminum surface matched to local
+ * ambient light, top overhang recess shadow, stamped 3D embossed Indonesian Korlantas characters,
+ * balanced top/bottom margins, and uniform sensor grain across plate and ink) onto a supersampled
+ * offscreen canvas and composites it onto the master photo using exact perspective transform.
  */
 function renderNaturalPlate(
   ctx: CanvasRenderingContext2D,
@@ -112,8 +142,8 @@ function renderNaturalPlate(
 
   if (w <= 0 || h <= 0) return;
 
-  // 2x supersampling offscreen canvas for crisp yet naturally anti-aliased edges
-  const ss = 2;
+  // 3x supersampling offscreen canvas for crisp, smooth embossed edges before optical blur
+  const ss = 3;
   const pw = w * ss;
   const ph = h * ss;
 
@@ -124,126 +154,250 @@ function renderNaturalPlate(
   if (!pCtx) return;
 
   // Clip to subtle rounded corners matching real stamped Indonesian plates
-  const cornerR = Math.max(2, Math.round(ph * 0.08));
+  const cornerR = Math.max(3, Math.round(ph * 0.09));
   pCtx.beginPath();
   pCtx.roundRect(0, 0, pw, ph, cornerR);
   pCtx.clip();
 
-  // 1. Base metallic surface gradient matched to local photo lighting
+  // 1. Base painted/anodized aluminum surface gradient matched to local photo lighting
   const grad = pCtx.createLinearGradient(0, 0, 0, ph);
   grad.addColorStop(0, inner.topColor);
+  grad.addColorStop(0.55, inner.botColor);
   grad.addColorStop(1, inner.botColor);
   pCtx.fillStyle = grad;
   pCtx.fillRect(0, 0, pw, ph);
 
-  // 2. Subtle recessed ambient top overhang shadow & gentle side vignette
-  const topShadow = pCtx.createLinearGradient(0, 0, 0, ph * 0.28);
-  topShadow.addColorStop(0, 'rgba(10, 12, 16, 0.14)');
+  // 2. Subtle recessed ambient top frame overhang shadow, side edge softness & metallic sheen
+  const topShadow = pCtx.createLinearGradient(0, 0, 0, ph * 0.26);
+  topShadow.addColorStop(0, 'rgba(10, 12, 16, 0.17)');
+  topShadow.addColorStop(0.45, 'rgba(10, 12, 16, 0.05)');
   topShadow.addColorStop(1, 'rgba(10, 12, 16, 0)');
   pCtx.fillStyle = topShadow;
-  pCtx.fillRect(0, 0, pw, ph * 0.28);
+  pCtx.fillRect(0, 0, pw, ph * 0.26);
 
-  const botShadow = pCtx.createLinearGradient(0, ph * 0.84, 0, ph);
+  const botShadow = pCtx.createLinearGradient(0, ph * 0.85, 0, ph);
   botShadow.addColorStop(0, 'rgba(10, 12, 16, 0)');
-  botShadow.addColorStop(1, 'rgba(10, 12, 16, 0.08)');
+  botShadow.addColorStop(1, 'rgba(10, 12, 16, 0.09)');
   pCtx.fillStyle = botShadow;
-  pCtx.fillRect(0, ph * 0.84, pw, ph * 0.16);
+  pCtx.fillRect(0, ph * 0.85, pw, ph * 0.15);
 
-  // Subtle horizontal metallic sheen
   const sheen = pCtx.createLinearGradient(0, 0, pw, 0);
-  sheen.addColorStop(0, 'rgba(0, 0, 0, 0.04)');
-  sheen.addColorStop(0.35, 'rgba(255, 255, 255, 0.03)');
-  sheen.addColorStop(0.65, 'rgba(255, 255, 255, 0.02)');
-  sheen.addColorStop(1, 'rgba(0, 0, 0, 0.05)');
+  sheen.addColorStop(0, 'rgba(0, 0, 0, 0.05)');
+  sheen.addColorStop(0.08, 'rgba(255, 255, 255, 0.01)');
+  sheen.addColorStop(0.38, 'rgba(255, 255, 255, 0.04)');
+  sheen.addColorStop(0.68, 'rgba(255, 255, 255, 0.02)');
+  sheen.addColorStop(0.92, 'rgba(0, 0, 0, 0.02)');
+  sheen.addColorStop(1, 'rgba(0, 0, 0, 0.06)');
   pCtx.fillStyle = sheen;
   pCtx.fillRect(0, 0, pw, ph);
 
-  // 3. Stamp Indonesian TNKB characters in natural camera-matched charcoal ink
-  const charHeight = inner.charHeightPx * ss;
-  const groups = parseIndoPlateGroups(plateText);
-  const fontFam = '"CharlesWrightPlate", "MandatoryPlate", "PlatNomor", sans-serif';
+  // Subtle recessed inner stamped plate border lip
+  const lipInset = Math.max(1.5, ph * 0.032);
+  pCtx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  pCtx.lineWidth = Math.max(1, ss * 0.55);
+  pCtx.beginPath();
+  pCtx.roundRect(lipInset, lipInset, pw - lipInset * 2, ph - lipInset * 2, Math.max(2, cornerR - lipInset));
+  pCtx.stroke();
 
-  pCtx.font = `bold ${charHeight}px ${fontFam}`;
-  pCtx.textBaseline = 'middle';
+  // 3. Measure & Stamp Indonesian Korlantas TNKB characters
+  const usePlatNomor =
+    platNomorLoaded ||
+    (typeof document !== 'undefined' && document.fonts
+      ? document.fonts.check('20px "PlatNomor"')
+      : false);
+  const fontFam = '"PlatNomor", "MandatoryPlate", "CharlesWrightPlate", sans-serif';
 
-  const intraGroupGap = Math.max(2, Math.round(charHeight * 0.12));
-  const interGroupGap = Math.max(6, Math.round(charHeight * 0.42));
+  const trimmedExp = (plateExp || '').trim();
+  const hasExp = trimmedExp.length > 0;
+
+  // Authentic Indonesian Korlantas vertical proportions:
+  // ~17.5% top margin, ~45% visual cap height, ~10% middle gap, ~16.5% expiry height, ~11% bottom margin
+  const targetMainCapH = ph * (hasExp ? 0.45 : 0.53);
+  const mainTopY = ph * (hasExp ? 0.175 : 0.235);
+
+  // Calibrate true ink cap-height ratio using PlatNomor reference glyphs ('B8')
+  const probeSize = 100;
+  pCtx.font = `normal ${probeSize}px ${fontFam}`;
+  pCtx.textBaseline = 'alphabetic';
+  const probeMetrics = pCtx.measureText('B8');
+  const probeInkH = Math.max(
+    40,
+    (probeMetrics.actualBoundingBoxAscent || 72) + (probeMetrics.actualBoundingBoxDescent || 0)
+  );
+  const inkRatio = probeInkH / probeSize;
+
+  // Compensate slightly for rounded stroke thickening so outer inked edges fit exact vertical target
+  const strokeThick = usePlatNomor ? Math.max(0.8, targetMainCapH * 0.048) : 0;
+  const effectiveInnerCapH = Math.max(10, targetMainCapH - strokeThick);
+  const mainFontSize = effectiveInnerCapH / inkRatio;
+
+  pCtx.font = `normal ${mainFontSize}px ${fontFam}`;
+  pCtx.textBaseline = 'alphabetic';
+  const refMetrics = pCtx.measureText('B8');
+  const refAscent = refMetrics.actualBoundingBoxAscent || effectiveInnerCapH;
+
+  // Baseline Y placed so visual top of main characters (including half stroke) sits cleanly at mainTopY
+  const mainBaselineY = mainTopY + strokeThick * 0.5 + refAscent;
+
+  const groups = parseIndoPlateGroups(plateText).map((g) => formatKorlantasGlyphs(g, usePlatNomor));
+  const totalChars = groups.reduce((acc, g) => acc + g.length, 0);
+
+  // Subtle horizontal breadth factor for PlatNomor condensed geometry, plus natural Korean/Korlantas kerning
+  const charAspectX = usePlatNomor ? 1.08 : 1.0;
+  const intraGroupGap = Math.max(1.5, targetMainCapH * 0.13);
+  const interGroupGap = Math.max(
+    4,
+    targetMainCapH * (totalChars <= 5 ? 0.56 : 0.46)
+  );
 
   interface CharLayout {
     char: string;
     width: number;
   }
-
   interface GroupLayout {
     chars: CharLayout[];
     width: number;
   }
 
   const groupLayouts: GroupLayout[] = [];
-  let totalContentWidth = 0;
+  let totalRawWidth = 0;
 
   groups.forEach((grp, gIdx) => {
     let grpW = 0;
     const chars: CharLayout[] = [];
     for (let i = 0; i < grp.length; i++) {
       const ch = grp[i];
-      const cw = pCtx.measureText(ch).width;
+      const cw = pCtx.measureText(ch).width + strokeThick * 0.7;
       chars.push({ char: ch, width: cw });
       grpW += cw;
       if (i < grp.length - 1) grpW += intraGroupGap;
     }
     groupLayouts.push({ chars, width: grpW });
-    totalContentWidth += grpW;
-    if (gIdx < groups.length - 1) totalContentWidth += interGroupGap;
+    totalRawWidth += grpW;
+    if (gIdx < groups.length - 1) totalRawWidth += interGroupGap;
   });
 
-  const maxAllowedWidth = pw * 0.90;
-  const scaleX = totalContentWidth > maxAllowedWidth ? maxAllowedWidth / totalContentWidth : 1.0;
+  const maxAllowedWidth = pw * 0.85;
+  const desiredScaledWidth = totalRawWidth * charAspectX;
+  const scaleX = desiredScaledWidth > maxAllowedWidth
+    ? maxAllowedWidth / totalRawWidth
+    : charAspectX;
 
-  pCtx.save();
-  pCtx.translate(pw / 2, ph / 2);
+  // Expiration layout calculation (positioned in lower ~72.5% - 89% band)
+  const targetExpCapH = ph * 0.165;
+  const expTopY = ph * 0.725;
+  const expStrokeThick = usePlatNomor ? Math.max(0.45, targetExpCapH * 0.055) : 0;
+  const expFontSize = Math.max(6, (targetExpCapH - expStrokeThick) / inkRatio);
+  const expAscent = expFontSize * inkRatio;
+  const expBaselineY = expTopY + expStrokeThick * 0.5 + expAscent;
+  const expCenterY = expTopY + targetExpCapH * 0.5;
 
-  // Main characters
-  pCtx.save();
-  pCtx.scale(scaleX, 1.0);
-  pCtx.fillStyle = inner.textColor;
-  pCtx.globalAlpha = 0.91;
-  pCtx.shadowColor = 'rgba(0, 0, 0, 0.16)';
-  pCtx.shadowBlur = 1.2;
-  pCtx.shadowOffsetY = 0.6;
-  pCtx.textAlign = 'left';
-  pCtx.textBaseline = 'middle';
+  // Helper to draw all plate text (main + expiry) on any context for emboss passes
+  const drawAllTextPass = (
+    targetCtx: CanvasRenderingContext2D,
+    color: string,
+    offsetX: number,
+    offsetY: number,
+    extraStroke: number = 0
+  ) => {
+    targetCtx.save();
+    targetCtx.fillStyle = color;
+    targetCtx.strokeStyle = color;
+    targetCtx.textAlign = 'left';
+    targetCtx.textBaseline = 'alphabetic';
+    targetCtx.font = `normal ${mainFontSize}px ${fontFam}`;
 
-  let curX = -totalContentWidth / 2;
-  const mainY = inner.mainOffsetYPx * ss;
+    // Main plate row
+    targetCtx.save();
+    targetCtx.translate(pw / 2 + offsetX, offsetY);
+    targetCtx.scale(scaleX, 1.0);
 
-  groupLayouts.forEach((grp, gIdx) => {
-    grp.chars.forEach((cItem, cIdx) => {
-      pCtx.fillText(cItem.char, curX, mainY);
-      curX += cItem.width;
-      if (cIdx < grp.chars.length - 1) curX += intraGroupGap;
+    let curX = -totalRawWidth / 2;
+    const activeStroke = strokeThick + extraStroke;
+    groupLayouts.forEach((grp, gIdx) => {
+      grp.chars.forEach((cItem, cIdx) => {
+        drawStampedGlyph(targetCtx, cItem.char, curX, mainBaselineY, activeStroke);
+        curX += cItem.width;
+        if (cIdx < grp.chars.length - 1) curX += intraGroupGap;
+      });
+      if (gIdx < groupLayouts.length - 1) curX += interGroupGap;
     });
-    if (gIdx < groupLayouts.length - 1) curX += interGroupGap;
-  });
+    targetCtx.restore();
+
+    // Expiration row ("04 · 28" with crisp circular separator dot so PlatNomor never drops '·')
+    if (hasExp) {
+      targetCtx.save();
+      targetCtx.font = `normal ${expFontSize}px ${fontFam}`;
+      const expClean = formatKorlantasGlyphs(trimmedExp, usePlatNomor);
+      const expParts = expClean.split(/[·.\-\s]+/).filter(Boolean);
+
+      if (expParts.length === 2) {
+        const leftPart = expParts[0];
+        const rightPart = expParts[1];
+        const dotRadius = Math.max(0.9, targetExpCapH * 0.14);
+        const dotSpace = Math.max(2.5, targetExpCapH * 0.42);
+        const leftW = targetCtx.measureText(leftPart).width + expStrokeThick * 0.6;
+        const rightW = targetCtx.measureText(rightPart).width + expStrokeThick * 0.6;
+        const expTotalW = leftW + dotSpace * 2 + dotRadius * 2 + rightW;
+        const startX = pw / 2 + offsetX - (expTotalW * charAspectX) / 2;
+
+        targetCtx.translate(startX, offsetY);
+        targetCtx.scale(charAspectX, 1.0);
+
+        drawStampedGlyph(targetCtx, leftPart, 0, expBaselineY, expStrokeThick + extraStroke * 0.5);
+
+        const dotCx = leftW + dotSpace + dotRadius;
+        targetCtx.beginPath();
+        targetCtx.arc(dotCx, expCenterY, dotRadius + extraStroke * 0.25, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        const rightX = dotCx + dotRadius + dotSpace;
+        drawStampedGlyph(targetCtx, rightPart, rightX, expBaselineY, expStrokeThick + extraStroke * 0.5);
+      } else {
+        targetCtx.translate(pw / 2 + offsetX, offsetY);
+        targetCtx.scale(charAspectX, 1.0);
+        targetCtx.textAlign = 'center';
+        drawStampedGlyph(targetCtx, expClean, 0, expBaselineY, expStrokeThick + extraStroke * 0.5);
+      }
+      targetCtx.restore();
+    }
+
+    targetCtx.restore();
+  };
+
+  // Pass 3A: Soft contact shadow cast downward onto aluminum surface by raised embossed digits
+  pCtx.save();
+  pCtx.shadowColor = 'rgba(0, 0, 0, 0.26)';
+  pCtx.shadowBlur = Math.max(1.2, ph * 0.028);
+  pCtx.shadowOffsetX = 0.2 * ss;
+  pCtx.shadowOffsetY = Math.max(0.8, ph * 0.016);
+  pCtx.globalAlpha = 0.55;
+  drawAllTextPass(pCtx, inner.textColor, 0, 0, 0);
   pCtx.restore();
 
-  // Expiration date ("04·28")
-  if (plateExp && plateExp.trim()) {
+  // Pass 3B: Faint top-left metallic bevel rim highlight along raised stamped metal ridges
+  pCtx.save();
+  pCtx.globalAlpha = 0.14;
+  drawAllTextPass(pCtx, '#ffffff', -0.22 * ss, -0.32 * ss, 0.15 * ss);
+  pCtx.restore();
+
+  // Pass 3C: Render charcoal painted ink face onto dedicated offscreen layer first so stroke+fill
+  // blend at uniform 91% matte/satin density without overlapping-alpha dark seams
+  const inkCanvas = document.createElement('canvas');
+  inkCanvas.width = pw;
+  inkCanvas.height = ph;
+  const inkCtx = inkCanvas.getContext('2d');
+  if (inkCtx) {
+    drawAllTextPass(inkCtx, inner.textColor, 0, 0, 0);
     pCtx.save();
-    pCtx.font = `bold ${inner.expHeightPx * ss}px ${fontFam}`;
-    pCtx.textAlign = 'center';
-    pCtx.textBaseline = 'middle';
-    pCtx.fillStyle = inner.textColor;
-    pCtx.globalAlpha = 0.82;
-    pCtx.fillText(plateExp.trim(), 0, inner.expOffsetYPx * ss);
+    pCtx.globalAlpha = 0.91;
+    pCtx.drawImage(inkCanvas, 0, 0);
     pCtx.restore();
   }
 
-  pCtx.restore();
-
   // 4. Subtle recessed plate edge hairline (soft, never harsh digital outline)
-  pCtx.strokeStyle = 'rgba(22, 25, 30, 0.42)';
-  pCtx.lineWidth = ss;
+  pCtx.strokeStyle = 'rgba(20, 23, 28, 0.42)';
+  pCtx.lineWidth = Math.max(1, ss * 0.85);
   pCtx.beginPath();
   pCtx.roundRect(0.5, 0.5, pw - 1, ph - 1, cornerR);
   pCtx.stroke();
@@ -253,14 +407,14 @@ function renderNaturalPlate(
   const data = imgData.data;
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) continue;
-    const grain = (Math.random() - 0.5) * 6;
+    const grain = (Math.random() - 0.5) * 7.5;
     data[i] = Math.min(255, Math.max(0, data[i] + grain));
     data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + grain));
     data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + grain));
   }
   pCtx.putImageData(imgData, 0, 0);
 
-  // 6. Composite onto master image with perspective transform & slight optical softness
+  // 6. Composite onto master image with perspective transform & natural lens softness
   ctx.save();
   ctx.translate(cx, cy);
 
@@ -274,7 +428,8 @@ function renderNaturalPlate(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   if ('filter' in ctx) {
-    ctx.filter = 'blur(0.32px)';
+    const adaptiveBlur = Math.min(0.42, Math.max(0.24, w * 0.0036));
+    ctx.filter = `blur(${adaptiveBlur.toFixed(2)}px)`;
   }
   ctx.drawImage(plateCanvas, -w / 2, -h / 2, w, h);
   ctx.restore();
